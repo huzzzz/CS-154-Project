@@ -1,0 +1,276 @@
+#lang racket
+(require scheme/mpair)
+(require "Bitmap.rkt")
+
+(define (helper f img name) ;This is higher order function. It will be called from each function which user types in to do some
+                            ;conversions(like list to vector) and then apply given input f and write image in new image object
+                            ;with given name by user
+  (define vecx (send img get-image));vecx is copy bitmap of original image;vecx is bitmap in vector of vector format
+  (define x (vector->list (vector-map! vector->list vecx)))
+  (define newimgl (f x));call required function f
+  (define newimgv (list->vector (map list->vector newimgl)))
+  (define image (make-object bitmap-image%));create new image for changed functionality
+  (send image set-image-vec! newimgv)
+  (send image write-image name))
+
+(define (vertical-flip image name);using higher order function helper to apply function reverse
+  (helper reverse image name))
+
+(define (rotate m)                    ; m is list of lists
+  (for/list ((i (length (list-ref m 0)))) ; loop for length of first inner list
+    (for/list ((il m))                    ; for each inner list (il)
+      (list-ref il i))))                  
+
+(define (rotate-image image name);using higher order function helper to apply function rotate defined above
+  (helper rotate image name))
+
+(define (mirror m);m is list of list
+  (if (null? m) '()
+  (cons (reverse (car m)) (mirror (cdr m)))))
+
+(define (horizontal-flip image name);using higher order function helper to apply function mirror defined above
+  (helper mirror image name))
+
+
+(define (4in1 x)
+  (if (null? x) '()
+  (cons (modify (car x))
+         (4in1 (cddr x)))))
+
+(define (2in1 x y)
+  (append (4in1 x) (4in1 y)))
+
+(define (modify m)
+  (if (null? m) '()
+      (cons (car m) (modify (cddr m)))));outputs a list by skipping alternate elements
+
+(define (collage2in1 image1 image2 name);form collage of 2 input images given by the user(constrait is size shoild be same)
+  
+  (define vecx (send image1 get-image));vecx is copy bitmap of original image;vecx is bitmap in vector of vector format
+  (define x (vector->list (vector-map! vector->list vecx)))
+  (define vecy (send image2 get-image));vecx is copy bitmap of original image;vecx is bitmap in vector of vector format
+  (define y (vector->list (vector-map! vector->list vecy)))
+  (define img3l (2in1 x y))
+  (define img3v (list->vector (map list->vector img3l)))
+  (define image3 (make-object bitmap-image%));create new image for changed functionality
+  (if (or (not (eq? (length x) (length y))) (not (eq? (length (list-ref x 0)) (length (list-ref y 0)))))
+      "images should be of same size"
+            (begin 
+      (send image3 set-image-vec! img3v)
+      (send image3 write-image name))))
+
+
+(define (h2in1 x y)
+  (if (or (null? x) (null? x)) '()
+      (cons (append (car x) (car y)) (h2in1 (cdr x) (cdr y)))));append 1st list of 2 images and so on
+
+(define (collage4in1 image1 image2 image3 image4 name);same as collage2in1 but takes 4 images and form a square collage
+  (define vecx (send image1 get-image));vecx is copy bitmap of original image;vecx is bitmap in vector of vector format
+  (define x (vector->list (vector-map! vector->list vecx)))
+  (define vecy (send image2 get-image));vecx is copy bitmap of original image;vecx is bitmap in vector of vector format
+  (define y (vector->list (vector-map! vector->list vecy)))
+  (define vecz (send image3 get-image));vecx is copy bitmap of original image;vecx is bitmap in vector of vector format
+  (define z (vector->list (vector-map! vector->list vecx)))
+  (define vecw (send image4 get-image));vecx is copy bitmap of original image;vecx is bitmap in vector of vector format
+  (define w (vector->list (vector-map! vector->list vecx)))
+  (define img4l (h2in1 (2in1 x y) (2in1 z w)))
+  (define img4v (list->vector (map list->vector img4l)))
+  (define image4 (make-object bitmap-image%));create new image for changed functionality
+  (if (or (not (= (length x) (length y) (length z) (length w)))
+          (not (= (length (list-ref x 0)) (length (list-ref y 0)) (length (list-ref z 0)) (length (list-ref w 0)))))
+      "images should be of same size"
+      
+      (begin 
+      (send image4 set-image-vec! img4v)
+      (send image4 write-image name))))
+
+
+(define (change m)
+  (map (lambda(l) (changel l)) m))
+(define (changel l)
+  (map (lambda(x) (node (quotient (+ (node-red x) (node-green x) (node-green x)) 3)
+                        (quotient (+ (node-red x) (node-green x) (node-green x)) 3)
+                        (quotient (+ (node-red x) (node-green x) (node-green x)) 3))) l));intensity will be avg of rbg
+
+(define (blackwhite image name);using higher order function helper to apply function change whichis defined above
+  (helper mirror image name))
+
+;;;Utilities functions
+
+;;; Convert a straight list of all the pixels to a matrix
+(define (convert-listtoimg x width height)
+  (if (null? x) '()
+      (let* ([tem_list (helpermm x 1 width '())])
+          (cons (car tem_list) (convert-listtoimg (cdr tem_list) width height)))))
+
+  (define (helpermm list i width listnew)
+    (if (= i (+ 1 width)) (cons (reverse listnew) list) (helpermm (cdr list) (+ i 1) width (cons (car list) listnew))))
+                
+;;; Overloaded the operator + and * for nodes
+
+(define (+-new g1 g2)
+  (node (+ (node-red g1) (node-red g2)) (+ (node-green g1) (node-green g2)) (+ (node-blue g1) (node-blue g2))))
+  
+(define (*-new wt g2)
+  (node (* wt (node-red g2)) (* wt (node-green g2)) (* wt (node-blue g2))))
+
+;;; Returns the function taking into account the pixel value 
+(define (exact-val factor bias n)
+  (node (min (max 0 (exact-floor (- (* factor (node-red n)) bias))) 255)
+        (min (max 0 (exact-floor (- (* factor (node-green n)) bias))) 255)
+        (min (max 0 (exact-floor (- (* factor (node-blue n)) bias))) 255)))
+
+;;;Used to generate the random matrix for the filter
+(define (random-row i width list)
+  (if (= i width) list
+      (random-row (+ i 1) width (cons (random 100) list))))
+
+(define (random-matrix i width height list)
+  (if (= i height) list
+      (random-matrix (+ i 1) width height (cons (random-row 0 width '()) list))))
+
+(define (random-filter radius)
+  (let* ([temp (random-matrix 0.0 (+ (* radius radius) 1.0) (+ (* radius radius) 1.0) '())]
+         [sum (foldr + 0.0 (map (lambda (x) (foldr + 0.0 x)) temp))])
+    (map (lambda (x) (map (lambda (y) (/ y sum)) x)) temp)))
+
+;;; Convolution function: input parameters : image: Input image
+;;;                                          filter: The filter to apply
+;;;                                          factor: A factor to multiply
+;;;                                          bias: constant to add to the matrix 
+(define (convol img filter factor bias)
+  (define width (length (cadr img)))
+  (define height (length img))
+  (define img-list (append* img))
+  (define data-vec (list->vector img-list))
+  ;;posconv : compute the offset of the pixel data within the buffer
+  (define (posconv i j)
+    (+ i (* j width)))
+  (define totalpixels (* width height))
+  (define new-vec (make-vector totalpixels 0))
+  (define filter-x (length (car filter)))
+  (define filter-y (length filter))
+  (define offset-x (/ (- filter-x 1) 2))
+  (define offset-y (/ (- filter-y 1) 2))
+  ;; compute the filtered byte array
+  (for* ([x width]
+         [y height])
+    (define new-val
+      (for*/fold ([sum (node 0.0 0.0 0.0)])
+                 ([dx filter-x]
+                  [dy filter-y])
+        (define sample-x (modulo (+ dx (- x offset-x)) width))
+        (define sample-y (modulo (+ dy (- y offset-y)) height))
+        (define sample-value (vector-ref data-vec (posconv sample-x sample-y)))
+        (define weight (list-ref (list-ref filter dy) dx))
+        (+-new sum (*-new weight sample-value))))
+    (vector-set! new-vec (posconv x y) (exact-val factor bias new-val)))
+  (convert-listtoimg (vector->list new-vec) width height))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; All the following functions use the convol function
+
+;; Blur: blur the image using the given filter
+;; blurring uses the pixel values of the surrounding and takes the average and replaces the pixel value with the average
+;; of the local surroundings
+
+(define (blur img name)
+  (helper blurrer img name))
+
+(define (blurrer img)
+  (define filter-blur '((0.0 0.25 0.0)
+                        (0.25 0.1 0.25)
+                        (0.0 0.25 0.0)))
+  (convol img filter-blur 1 0))
+
+;; Motion-blur: Blurs using the filter such that each pixel value is replaced by an average of the pixels that are
+;; in the diagonal.
+
+(define (motion-blur img name)
+  (helper motion-blurrer img name))
+
+(define (motion-blurrer img)
+  (define filter-motblur '((0.1 0.0 0.0 0.0 0.0)
+                           (0.0 0.1 0.0 0.0 0.0)
+                           (0.0 0.0 0.1 0.0 0.0)
+                           (0.0 0.0 0.0 0.1 0.0)
+                           (0.0 0.0 0.0 0.0 0.1)))
+  (convol img filter-motblur 1 0))
+
+;; Find Edges: Finds edges in the vertical direction.
+;; the idea is that each pixel is subtracted with its neighbouring pixels in the vertical direction an =d if there is
+;; the subtraction is not much
+
+(define (find-edges img name)
+  (helper finder-edges img name))
+
+(define (finder-edges img)
+  (define filter-finder '((0 0 -1 0 0)
+                          (0 0 -1 0 0)
+                          (0 0 4 0 0)
+                          (0 0 -1 0 0)
+                          (0 0 -1 0 0)))
+  (convol img filter-finder 1 0))
+
+;; Sharpen : Sharpens the image using the filter such that most weight is given to the pixel and the
+;; immediate neighbouring to get the distinnction of the pixel 
+
+(define (sharpen img name)
+  (helper sharpener img name))
+
+(define (sharpener img)
+  (define sharpen-filter '((-1 -1 -1)
+                           (-1 9 -1)
+                           (-1 -1 -1)))
+  (convol img sharpen-filter 1 0))
+
+;; Emboss : 
+
+(define (emboss img name)
+  (helper embosser img name))
+
+(define (embosser img)
+  (define emboss-filter '((-1 -1 0)
+                          (-1 0 1)
+                          (0 1 1)))
+  (convol img emboss-filter 1 0))
+
+;;  General Filtering : Provides a higher order filter such that whatever the filter the user gives it filters the image
+;; and returns the output again as a object
+
+(define (gen-filter img filter factor bias name)
+  (helper (lambda (x) (gen-filterer x filter)) img name))
+
+(define (gen-filterer img filter factor bias)
+  (convol img filter factor bias))
+
+;Gaussian Filtering: Uses the standard gaussian filter for filtering images
+
+(define (gaussian-filter img name)
+  (helper gaussianfiltering img name))
+
+(define (gaussianfiltering img)
+  (define gaussian_filter '[[0.011 0.084 0.011]
+                 [0.084 0.620 0.084]
+                 [0.011 0.084 0.011]])
+  (convol img gaussian_filter 1 0))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Thresholding:
+
+;;; Function for thresholding the image based on some value
+;;; input params : img : bitmap-image object Image to be tresholded
+;;;                name : string: name of the image where thresholded image is to be written
+;;;                threshold : a pixel value that is used as a reference, values above this pixel are converted to white
+;;;                            others to black
+
+(define (threshold img name threshold)
+  (helper (lambda (x) (threshold-img x threshold)) img name))
+
+(define (threshold-img img threshold)
+  (define (thresher val)
+    (if (and (> (node-red val) (node-red threshold))
+             (> (node-blue val) (node-blue threshold))
+             (> (node-green val) (node-green threshold)))
+        (node 255 255 255)
+        (node 0 0 0)))
+  (map (lambda (x) (map thresher x)) img)) 

@@ -1,0 +1,1 @@
+To run a demo of all the functions change the file name in test.rkt to the image name, which is stored in the same directory and should be in bmp format.
